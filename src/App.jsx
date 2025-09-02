@@ -83,6 +83,9 @@ export default function App() {
 
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [isRegister, setIsRegister] = useState(false)
 
   useEffect(() => {
     if (!sb) return;
@@ -92,10 +95,27 @@ export default function App() {
   }, [sb]);
 
   const signIn = async () => {
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await sb.auth.signInWithOtp({ email });
     if (error) alert(error.message); else alert("Kolla din e-post för inloggningslänk");
   };
   const signOut = async () => { await sb.auth.signOut(); };
+
+  const verifyOtp = async () => {
+    if (!email || !otpCode) { alert("Fyll i e-post och kod"); return; }
+    const { error } = await sb.auth.verifyOtp({ email, token: otpCode, type: "email" });
+    if (error) alert(error.message);
+  };
+
+  const signInPassword = async () => {
+    if (!email || !password) { alert("Fyll i e-post och lösenord"); return; }
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message);
+  };
+  const signUpPassword = async () => {
+    if (!email || !password) { alert("Fyll i e-post och lösenord"); return; }
+    const { error } = await sb.auth.signUp({ email, password });
+    if (error) alert(error.message);
+  };
 
   const [machines, setMachines] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -183,13 +203,37 @@ export default function App() {
     );
   }
 
-  if (!session) {
+    if (!session) {
     return (
       <div className="container">
-        <div className="grid" style={{maxWidth:480, margin:"0 auto"}}>
+        <div className="grid" style={{maxWidth:560, margin:"0 auto"}}>
           <h1>Logga in</h1>
           <input className="input" placeholder="din@epost.se" value={email} onChange={(e)=>setEmail(e.target.value)} />
-          <button className="btn primary" onClick={signIn}>Skicka magisk länk</button>
+          <div className="row" style={{marginTop:8}}>
+            <button className="btn primary" onClick={signIn}>Skicka magisk länk</button>
+          </div>
+          <div className="card" style={{marginTop:12}}>
+            <strong>Har du en 6-siffrig kod?</strong>
+            <div className="row" style={{marginTop:8}}>
+              <input className="input" placeholder="Engångskod från e-post" value={otpCode} onChange={(e)=>setOtpCode(e.target.value.trim())} />
+              <button className="btn" onClick={verifyOtp}>Verifiera kod</button>
+            </div>
+            <p className="muted" style={{fontSize:12, marginTop:6}}>Tips: Om länken strular i mailappen kan du klistra in koden här.</p>
+          </div>
+
+          <div className="card" style={{marginTop:12}}>
+            <div className="row-center" style={{justifyContent:'space-between'}}>
+              <strong>{isRegister ? 'Skapa konto med lösenord' : 'Logga in med lösenord'}</strong>
+              <button className="btn" onClick={()=>setIsRegister(!isRegister)}>{isRegister ? 'Byt till inloggning' : 'Byt till registrering'}</button>
+            </div>
+            <div className="row" style={{marginTop:8}}>
+              <input className="input" placeholder="Lösenord (minst 6 tecken)" type="password" value={password} onChange={(e)=>setPassword(e.target.value)} />
+              {isRegister
+                ? <button className="btn" onClick={signUpPassword}>Registrera</button>
+                : <button className="btn" onClick={signInPassword}>Logga in</button>}
+            </div>
+            <p className="muted" style={{fontSize:12, marginTop:6}}>Obs: Kräver att **Email + Password** är aktiverat i Supabase (Auth → Providers).</p>
+          </div>
         </div>
       </div>
     );
