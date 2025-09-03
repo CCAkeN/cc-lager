@@ -11,41 +11,76 @@ async function getSupabase(url, key) {
 
 const isCC = (s) => /^CC\d{4}$/.test((s || "").trim());
 
+// --- QR Scanner with back-camera preference and swap ---
 const QRScanner = ({ onScan, onClose }) => {
   const holder = useRef(null);
   const [error, setError] = useState("");
+  const [devices, setDevices] = useState([]);
+  const [activeCam, setActiveCam] = useState(null);
+  const scannerRef = useRef(null);
+
+  const startWith = async (camId) => {
+    const { Html5Qrcode } = await import("html5-qrcode");
+    const id = "qr-reader";
+    let el = holder.current?.querySelector("#" + id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id; holder.current?.appendChild(el);
+    }
+    const scanner = new Html5Qrcode(id);
+    scannerRef.current = scanner;
+    await scanner.start(camId, { fps: 10, qrbox: { width: 260, height: 260 } }, (txt) => {
+      scanner.stop().finally(() => onScan(txt.trim()));
+    });
+  };
+
+  const stopScanner = async () => {
+    try { await scannerRef.current?.stop(); } catch {}
+    try {
+      const el = holder.current?.querySelector("#qr-reader"); if (el) el.remove();
+    } catch {}
+  };
 
   useEffect(() => {
-    let scanner; let stopped = false; let Html5Qrcode;
+    let isMounted = true;
     (async () => {
       try {
-        ({ Html5Qrcode } = await import("html5-qrcode"));
-        const id = "qr-reader";
-        const el = document.createElement("div");
-        el.id = id; holder.current?.appendChild(el);
-        scanner = new Html5Qrcode(id);
-        const devices = await Html5Qrcode.getCameras();
-        const camId = devices?.[0]?.id; if (!camId) throw new Error("Ingen kamera hittades");
-        await scanner.start(camId, { fps: 10, qrbox: { width: 260, height: 260 } }, (txt) => {
-          if (stopped) return; stopped = true;
-          scanner.stop().finally(() => onScan(txt.trim()));
-        });
+        const { Html5Qrcode } = await import("html5-qrcode");
+        const cams = await Html5Qrcode.getCameras();
+        if (!isMounted) return;
+        setDevices(cams || []);
+        const preferred = cams?.find(d => /back|rear|environment/i.test(d.label)) || cams?.[cams.length - 1];
+        const camId = preferred?.id || cams?.[0]?.id;
+        if (!camId) throw new Error("Ingen kamera hittades");
+        setActiveCam(camId);
+        await startWith(camId);
       } catch (e) { setError(e?.message || "Kunde inte starta kameran"); }
     })();
-    return () => {
-      try { holder.current?.querySelector("#qr-reader")?.remove(); } catch {}
-    };
+    return () => { isMounted = false; stopScanner(); };
   }, [onScan]);
+
+  const swapCamera = async () => {
+    if (!devices.length) return;
+    const idx = devices.findIndex(d => d.id === activeCam);
+    const next = devices[(idx + 1) % devices.length];
+    await stopScanner();
+    setActiveCam(next.id);
+    try { await startWith(next.id); } catch (e) { setError(e?.message || "Kunde inte byta kamera"); }
+  };
 
   return (
     <div className="card">
       <div ref={holder} />
+      <div className="row" style={{marginTop:8}}>
+        {devices.length > 1 && <button className="btn" onClick={swapCamera}>Byt kamera</button>}
+        <button className="btn" onClick={onClose}>Avbryt</button>
+      </div>
       {error && <p style={{color:"#b91c1c", marginTop:8}}>{error}</p>}
-      <button className="btn" onClick={onClose} style={{marginTop:12}}>Avbryt</button>
     </div>
   );
 };
 
+// --- QR Generator ---
 const QRGen = ({ value, size = 200, label }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -66,9 +101,9 @@ const QRGen = ({ value, size = 200, label }) => {
 };
 
 export default function App() {
+  // Env
   const envUrl = import.meta.env.VITE_SUPABASE_URL || "";
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-
   const [supabaseUrl, setSupabaseUrl] = useState(envUrl);
   const [supabaseKey, setSupabaseKey] = useState(envKey);
   const [sb, setSb] = useState(null);
@@ -81,11 +116,12 @@ export default function App() {
     })();
   }, [supabaseUrl, supabaseKey]);
 
+  // Auth
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [password, setPassword] = useState("");
-  const [isRegister, setIsRegister] = useState(false)
+  const [isRegister, setIsRegister] = useState(false);
 
   useEffect(() => {
     if (!sb) return;
@@ -96,16 +132,14 @@ export default function App() {
 
   const signIn = async () => {
     const { error } = await sb.auth.signInWithOtp({ email });
-    if (error) alert(error.message); else alert("Kolla din e-post för inloggningslänk");
+    if (error) alert(error.message); else alert("Kolla din e-post för länk/kod");
   };
   const signOut = async () => { await sb.auth.signOut(); };
-
   const verifyOtp = async () => {
     if (!email || !otpCode) { alert("Fyll i e-post och kod"); return; }
     const { error } = await sb.auth.verifyOtp({ email, token: otpCode, type: "email" });
     if (error) alert(error.message);
   };
-
   const signInPassword = async () => {
     if (!email || !password) { alert("Fyll i e-post och lösenord"); return; }
     const { error } = await sb.auth.signInWithPassword({ email, password });
@@ -117,6 +151,7 @@ export default function App() {
     if (error) alert(error.message);
   };
 
+  // Data
   const [machines, setMachines] = useState([]);
   const [locations, setLocations] = useState([]);
   const [placements, setPlacements] = useState([]);
@@ -132,9 +167,9 @@ export default function App() {
     if (!l.error) setLocations(l.data);
     if (!p.error) setPlacements(p.data);
   };
-
   useEffect(() => { if (session) loadAll(); }, [session]);
 
+  // Realtime
   useEffect(() => {
     if (!sb || !session) return;
     const ch = sb.channel("placements-rt").on(
@@ -151,6 +186,8 @@ export default function App() {
     return () => { sb.removeChannel(ch); };
   }, [sb, session]);
 
+  // Derived
+  const [filterTerm, setFilterTerm] = useState("");
   const latestByMachine = useMemo(() => {
     const map = new Map();
     for (const p of placements) {
@@ -160,13 +197,14 @@ export default function App() {
     return map;
   }, [placements]);
 
+  // Actions
   const place = async (machine_id, location_id) => {
     if (!isCC(machine_id)) return alert("Maskin-ID måste vara CCxxxx");
     if (!locations.find((l) => l.id === location_id)) return alert("Ogiltig lagerplats");
     const { error } = await sb.from("placements").insert({ machine_id, location_id, user_email: session?.user?.email || "anon" });
     if (error) alert(error.message);
+    else { await sb.from('machines').update({ status: 'in_use' }).eq('id', machine_id); loadAll(); }
   };
-
   const addMachine = async (id) => {
     if (!isCC(id)) return alert("ID-format CCxxxx");
     const { error } = await sb.from("machines").insert({ id, status: 'in_use' });
@@ -177,18 +215,28 @@ export default function App() {
     const { error } = await sb.from("locations").insert({ id, capacity: 1 });
     if (error) alert(error.message); else loadAll();
   };
+  const deliverMachine = async (machine_id) => {
+    if (!isCC(machine_id)) return alert("Maskin-ID måste vara CCxxxx");
+    const up = await sb.from('machines').update({ status: 'delivered' }).eq('id', machine_id);
+    if (up.error) { alert(up.error.message); return; }
+    const ins = await sb.from('placements').insert({ machine_id, location_id: null, user_email: session?.user?.email || 'anon' });
+    if (ins.error) { alert(ins.error.message); return; }
+    setDeliverMachineId("");
+    loadAll();
+  };
 
+  // UI state
   const [pendingLocation, setPendingLocation] = useState("");
   const [pendingMachine, setPendingMachine] = useState("");
-  const [scanTarget, setScanTarget] = useState(null);
+  const [scanTarget, setScanTarget] = useState(null); // 'location' | 'machine'
+  const [deliverMachineId, setDeliverMachineId] = useState("");
+  const [scanDeliver, setScanDeliver] = useState(false);
 
-  const onScanLocation = (code) => { setScanTarget(null); setPendingLocation(code); };
-  const onScanMachine = (code) => { setScanTarget(null); setPendingMachine(code); place(code, pendingLocation); setPendingMachine(""); setPendingLocation(""); };
+  // Scan handlers (any order)
+  const onScanLocation = (code) => { setScanTarget(null); setPendingLocation(code); if (pendingMachine) place(pendingMachine, code); };
+  const onScanMachine = (code) => { setScanTarget(null); setPendingMachine(code); if (pendingLocation) { place(code, pendingLocation); setPendingMachine(""); setPendingLocation(""); } };
 
-  const [qrType, setQrType] = useState('location');
-  const [qrInput, setQrInput] = useState('');
-  const listIds = useMemo(() => qrInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean), [qrInput]);
-
+  // Setup screen
   if (!sb) {
     return (
       <div className="container">
@@ -203,7 +251,7 @@ export default function App() {
     );
   }
 
-    if (!session) {
+  if (!session) {
     return (
       <div className="container">
         <div className="grid" style={{maxWidth:560, margin:"0 auto"}}>
@@ -218,7 +266,7 @@ export default function App() {
               <input className="input" placeholder="Engångskod från e-post" value={otpCode} onChange={(e)=>setOtpCode(e.target.value.trim())} />
               <button className="btn" onClick={verifyOtp}>Verifiera kod</button>
             </div>
-            <p className="muted" style={{fontSize:12, marginTop:6}}>Tips: Om länken strular i mailappen kan du klistra in koden här.</p>
+            <p className="muted" style={{fontSize:12, marginTop:6}}>Om länken strular i mailappen kan du använda koden här.</p>
           </div>
 
           <div className="card" style={{marginTop:12}}>
@@ -232,7 +280,6 @@ export default function App() {
                 ? <button className="btn" onClick={signUpPassword}>Registrera</button>
                 : <button className="btn" onClick={signInPassword}>Logga in</button>}
             </div>
-            <p className="muted" style={{fontSize:12, marginTop:6}}>Obs: Kräver att **Email + Password** är aktiverat i Supabase (Auth → Providers).</p>
           </div>
         </div>
       </div>
@@ -250,6 +297,7 @@ export default function App() {
       </header>
 
       <div className="grid">
+        {/* Flytta maskin */}
         <section className="card">
           <h2>Flytta maskin</h2>
           <div className="grid grid-3">
@@ -264,39 +312,69 @@ export default function App() {
               <label className="muted">Maskin-ID (CCxxxx)</label>
               <div className="row">
                 <input className="input" value={pendingMachine} onChange={(e)=>setPendingMachine(e.target.value)} placeholder="t.ex. CC0012" />
-                <button className="btn" onClick={()=>setScanTarget('machine')} disabled={!pendingLocation}>Skanna</button>
+                <button className="btn" onClick={()=>setScanTarget('machine')}>Skanna</button>
               </div>
             </div>
             <div className="row-center" style={{alignItems:"end"}}>
-              <button className="btn primary" onClick={()=>{ place(pendingMachine, pendingLocation); setPendingMachine(''); setPendingLocation(''); }}>Registrera</button>
+              <button className="btn primary" onClick={()=>{ if(pendingLocation && pendingMachine){ place(pendingMachine, pendingLocation); setPendingMachine(''); setPendingLocation(''); } }}>Registrera</button>
             </div>
           </div>
         </section>
 
+        {/* Leverera ut */}
+        <section className="card">
+          <h2>Leverera ut maskin</h2>
+          <div className="grid grid-3">
+            <div>
+              <label className="muted">Maskin-ID (CCxxxx)</label>
+              <div className="row">
+                <input className="input" value={deliverMachineId} onChange={(e)=>setDeliverMachineId(e.target.value)} placeholder="t.ex. CC0012" />
+                <button className="btn" onClick={()=>setScanDeliver(true)}>Skanna</button>
+              </div>
+            </div>
+            <div className="row-center" style={{alignItems:"end"}}>
+              <button className="btn primary" onClick={()=>deliverMachine(deliverMachineId)}>Leverera ut</button>
+            </div>
+          </div>
+        </section>
+
+        {/* Aktuell plats */}
         <section className="card">
           <h2>Aktuell plats per maskin</h2>
+          <div className="row" style={{marginBottom:8}}>
+            <input className="input" placeholder="Filtrera på maskin-ID eller plats..." value={filterTerm} onChange={(e)=>setFilterTerm(e.target.value)} />
+          </div>
           <div style={{overflowX:"auto"}}>
             <table>
               <thead>
                 <tr><th>Maskin</th><th>Plats</th><th>Senast</th><th>Av</th></tr>
               </thead>
               <tbody>
-                {machines.map((m) => {
-                  const p = latestByMachine.get(m.id);
-                  return (
+                {machines
+                  .filter(m => m.status !== 'delivered')
+                  .map(m => {
+                    const p = latestByMachine.get(m.id);
+                    return { m, p };
+                  })
+                  .filter(({m,p}) => {
+                    if (!filterTerm) return true;
+                    const term = filterTerm.toLowerCase();
+                    return m.id.toLowerCase().includes(term) || (p?.location_id||"").toLowerCase().includes(term);
+                  })
+                  .map(({m,p}) => (
                     <tr key={m.id}>
                       <td style={{fontWeight:600}}>{m.id}</td>
                       <td>{p?.location_id ?? <span className="muted">–</span>}</td>
                       <td>{p?.timestamp ? new Date(p.timestamp).toLocaleString() : ""}</td>
                       <td>{p?.user_email || ""}</td>
                     </tr>
-                  );
-                })}
+                  ))}
               </tbody>
             </table>
           </div>
         </section>
 
+        {/* Historik */}
         <section className="card">
           <h2>Historik</h2>
           <div style={{overflowX:"auto"}}>
@@ -309,7 +387,7 @@ export default function App() {
                   <tr key={p.id}>
                     <td>{new Date(p.timestamp).toLocaleString()}</td>
                     <td>{p.machine_id}</td>
-                    <td>{p.location_id}</td>
+                    <td>{p.location_id ?? '-'}</td>
                     <td>{p.user_email}</td>
                   </tr>
                 ))}
@@ -318,63 +396,15 @@ export default function App() {
           </div>
         </section>
 
-        <section className="card">
-          <h2>Generera QR-etiketter</h2>
-          <div className="grid grid-3">
-            <div>
-              <label className="muted">Typ</label>
-              <select className="input" value={qrType} onChange={(e)=>setQrType(e.target.value)}>
-                <option value="location">Lagerplatser</option>
-                <option value="machine">Maskiner (CCxxxx)</option>
-              </select>
-              <label className="muted" style={{marginTop:8, display:"block"}}>ID-lista (kommaseparerad eller radbruten)</label>
-              <textarea className="input" style={{height:120}} placeholder={qrType==='machine' ? 'CC0001, CC0002, ...' : 'A1, A2, A3, ...'} value={qrInput} onChange={(e)=>setQrInput(e.target.value)} />
-              <div className="muted" style={{fontSize:12, marginTop:4}}>Tips: För maskiner, använd format CC + 4 siffror.</div>
-            </div>
-            <div className="grid grid-2" style={{gridColumn:"span 2"}}>
-              {listIds.map((id) => (
-                <div className="card" key={id}>
-                  <QRGen value={id} label={id} />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="row" style={{marginTop:12}}>
-            <button className="btn" onClick={()=>window.print()}>Skriv ut</button>
-            <button className="btn" onClick={async ()=>{
-              if (qrType==='machine') {
-                const payload = listIds.filter(isCC).map(id => ({ id, status: 'in_use' }));
-                if (payload.length) {
-                  const { error } = await sb.from('machines').insert(payload, { upsert: true });
-                  if (error) alert(error.message); else alert('Maskiner sparade');
-                } else {
-                  alert("Inga giltiga maskin-ID i format CCxxxx");
-                }
-              } else {
-                const payload = listIds.map(id => ({ id, capacity: 1 }));
-                if (payload.length) {
-                  const { error } = await sb.from('locations').insert(payload, { upsert: true });
-                  if (error) alert(error.message); else alert('Platser sparade');
-                }
-              }
-            }}>Spara dessa ID i databasen</button>
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>Admin</h2>
-          <div className="grid grid-2">
-            <InlineAdd placeholder="CC0123" onAdd={addMachine} />
-            <InlineAdd placeholder="A4 eller FLOOR-07" onAdd={addLocation} />
-          </div>
-        </section>
-
-        {scanTarget && (
-          <Modal title={`Skanna ${scanTarget === 'location' ? 'PLATS' : 'MASKIN'}`} onClose={()=>setScanTarget(null)}>
-            <QRScanner onScan={scanTarget==='location' ? onScanLocation : onScanMachine} onClose={()=>setScanTarget(null)} />
-          </Modal>
-        )}
+        {/* QR Generator */}
+        <QRSection sb={sb} />
       </div>
+
+      {(scanTarget || scanDeliver) && (
+        <Modal title={`Skanna ${scanDeliver ? 'MASKIN (leverans)' : (scanTarget === 'location' ? 'PLATS' : 'MASKIN')}`} onClose={()=>{ setScanTarget(null); setScanDeliver(false); }}>
+          <QRScanner onScan={(code)=>{ if (scanDeliver) { setScanDeliver(false); setDeliverMachineId(code); deliverMachine(code); } else { (scanTarget==='location' ? onScanLocation : onScanMachine)(code); } }} onClose={()=>{ setScanTarget(null); setScanDeliver(false); }} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -401,5 +431,56 @@ function InlineAdd({ placeholder, onAdd }) {
       <input className="input" value={v} onChange={(e)=>setV(e.target.value.trim())} placeholder={placeholder} />
       <button className="btn" onClick={()=>{ if (v) { onAdd(v); setV(""); } else { alert('Fyll i ett värde'); } }}>Lägg till</button>
     </div>
+  );
+}
+
+function QRSection({ sb }) {
+  const [qrType, setQrType] = useState('location');
+  const [qrInput, setQrInput] = useState('');
+  const listIds = useMemo(() => qrInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean), [qrInput]);
+
+  const isCC = (s) => /^CC\d{4}$/.test((s || "").trim());
+
+  const saveToDb = async () => {
+    if (qrType==='machine') {
+      const payload = listIds.filter(isCC).map(id => ({ id, status: 'in_use' }));
+      if (!payload.length) return alert("Inga giltiga maskin-ID i format CCxxxx");
+      const { error } = await sb.from('machines').insert(payload, { upsert: true });
+      if (error) alert(error.message); else alert('Maskiner sparade');
+    } else {
+      const payload = listIds.map(id => ({ id, capacity: 1 }));
+      if (!payload.length) return;
+      const { error } = await sb.from('locations').insert(payload, { upsert: true });
+      if (error) alert(error.message); else alert('Platser sparade');
+    }
+  };
+
+  return (
+    <section className="card">
+      <h2>Generera QR-etiketter</h2>
+      <div className="grid grid-3">
+        <div>
+          <label className="muted">Typ</label>
+          <select className="input" value={qrType} onChange={(e)=>setQrType(e.target.value)}>
+            <option value="location">Lagerplatser</option>
+            <option value="machine">Maskiner (CCxxxx)</option>
+          </select>
+          <label className="muted" style={{marginTop:8, display:"block"}}>ID-lista (kommaseparerad eller radbruten)</label>
+          <textarea className="input" style={{height:120}} placeholder={qrType==='machine' ? 'CC0001, CC0002, ...' : 'A1, A2, A3, ...'} value={qrInput} onChange={(e)=>setQrInput(e.target.value)} />
+          <div className="muted" style={{fontSize:12, marginTop:4}}>Tips: För maskiner, använd format CC + 4 siffror.</div>
+        </div>
+        <div className="grid grid-2" style={{gridColumn:"span 2"}}>
+          {listIds.map((id) => (
+            <div className="card" key={id}>
+              <QRGen value={id} label={id} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="row" style={{marginTop:12}}>
+        <button className="btn" onClick={()=>window.print()}>Skriv ut</button>
+        <button className="btn" onClick={saveToDb}>Spara dessa ID i databasen</button>
+      </div>
+    </section>
   );
 }
