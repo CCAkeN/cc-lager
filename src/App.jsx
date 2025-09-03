@@ -356,6 +356,7 @@ export default function App() {
                     const p = latestByMachine.get(m.id);
                     return { m, p };
                   })
+                  .filter(({ p }) => !!p?.location_id)
                   .filter(({m,p}) => {
                     if (!filterTerm) return true;
                     const term = filterTerm.toLowerCase();
