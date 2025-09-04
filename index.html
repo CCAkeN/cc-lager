@@ -22,42 +22,42 @@
       .row { display:flex; gap:8px; }
       .row-center { display:flex; align-items:center; gap:8px; }
 
-      /* Visa inte Avery-rutnätet på skärm */
-.avery-3481 { display: none; }
+      /* --- Avery 3481 robust print CSS --- */
+      /* Keep the avery container in DOM but move it off-screen on screen */
+      .avery-3481 { position: absolute; left: -200vw; top: -200vh; }
 
-/* När vi triggar Avery-utskrift lägger vi klassen på <html> */
-.print-avery body * { display: none !important; }           /* dölj allt */
-.print-avery .avery-3481,
-.print-avery .avery-3481 * { display: revert !important; }  /* visa bara etiketterna */
-.print-avery .avery-3481 {
-  position: absolute; inset: 0; margin: 0; padding: 0;
-  display: block !important;
-}
+      /* When html has .print-avery, isolate the label grid for printing */
+      .print-avery body * { visibility: hidden !important; }
+      .print-avery .avery-3481,
+      .print-avery .avery-3481 * { visibility: visible !important; }
+      .print-avery .avery-3481 {
+        left: 0; top: 0; right: 0; bottom: 0; position: absolute;
+        margin: 0; padding: 0;
+      }
 
-/* Exakt Avery 3481 geometri vid utskrift */
-@media print {
-  @page { size: A4 portrait; margin: 0; }
-  .print-avery .avery-3481-sheet {
-    width: 210mm; height: 297mm;
-    page-break-after: always;
-    display: grid;
-    grid-template-columns: 70mm 70mm 70mm; /* 3 kolumner */
-    grid-auto-rows: 41mm;                  /* 7 rader */
-    column-gap: 0; row-gap: 0;
-  }
-  .print-avery .avery-3481-label {
-    box-sizing: border-box;
-    padding: 2mm;
-    display: flex; align-items: center; gap: 2mm;
-  }
-  .print-avery .avery-qr { width: 30mm; height: 30mm; }
-  /* Viktigt: tvinga själva canvas att bli 30mm också */
-  .print-avery .avery-qr canvas { width: 30mm !important; height: 30mm !important; }
-  .print-avery .avery-text {
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    font-size: 16pt; font-weight: 700; line-height: 1.1;
-  }
-}
+      @media print {
+        @page { size: A4 portrait; margin: 0; }
+
+        .print-avery .avery-3481-sheet {
+          width: 210mm; height: 297mm;
+          page-break-after: always;
+          display: grid;
+          grid-template-columns: 70mm 70mm 70mm;
+          grid-auto-rows: 41mm;
+          column-gap: 0; row-gap: 0;
+        }
+        .print-avery .avery-3481-label {
+          box-sizing: border-box;
+          padding: 2mm;
+          display: flex; align-items: center; gap: 2mm;
+        }
+        .print-avery .avery-qr { width: 30mm; height: 30mm; }
+        .print-avery .avery-qr canvas { width: 30mm !important; height: 30mm !important; }
+        .print-avery .avery-text {
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+          font-size: 16pt; font-weight: 700; line-height: 1.1;
+        }
+      }
     </style>
   </head>
   <body>
