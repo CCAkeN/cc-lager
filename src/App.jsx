@@ -98,6 +98,24 @@ const QRGen = ({ value, size = 200, label }) => {
   );
 };
 
+function AveryLabelImg({ id }) {
+  const [src, setSrc] = React.useState("");
+  React.useEffect(() => {
+    (async () => {
+      const mod = await import("qrcode");
+      const QRCode = mod.default || mod;
+      const opts = { width: 360, margin: 1 };
+      QRCode.toDataURL(id, opts, (err, url) => { if (!err) setSrc(url); });
+    })();
+  }, [id]);
+  return (
+    <div className="avery-3481-label">
+      <div className="avery-qr"><img alt={id} src={src} /></div>
+      <div className="avery-text">{id}</div>
+    </div>
+  );
+}
+
 function AveryLabel({ id }) {
   return (
     <div className="avery-3481-label">
@@ -497,10 +515,22 @@ function QRSection({ sb }) {
           onClick={() => {
             const html = document.documentElement;
             html.classList.add('print-avery');
+            // wait for QR <img> to load before printing
             setTimeout(() => {
-              window.print();
-              setTimeout(() => html.classList.remove('print-avery'), 500);
-            }, 100);
+              const imgs = Array.from(document.querySelectorAll('.avery-3481 img'));
+              const ready = () => imgs.every(img => img.complete && img.naturalWidth > 0);
+              let waited = 0;
+              const tick = () => {
+                if (ready() || waited > 3000 || imgs.length === 0) {
+                  window.print();
+                  setTimeout(() => html.classList.remove('print-avery'), 500);
+                } else {
+                  waited += 100;
+                  setTimeout(tick, 100);
+                }
+              };
+              tick();
+            }, 50);
           }}
         >Skriv ut (Avery 3481)</button>
         <button className="btn" onClick={saveToDb}>Spara dessa ID i databasen</button>
@@ -510,7 +540,7 @@ function QRSection({ sb }) {
       <div className="avery-3481">
         {sheets.map((sheet, si) => (
           <div className="avery-3481-sheet" key={si}>
-            {sheet.map((id, i) => (<AveryLabel id={id} key={i} />))}
+            {sheet.map((id, i) => (<AveryLabelImg id={id} key={i} />))}
             {Array.from({length: Math.max(0, 21 - sheet.length)}).map((_,i)=>(<div className="avery-3481-label" key={'e'+i}></div>))}
           </div>
         ))}
