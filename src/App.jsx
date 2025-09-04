@@ -495,7 +495,18 @@ function QRSection({ sb }) {
       </div>
       <div className="row" style={{marginTop:12}}>
         <button className="btn" onClick={()=>window.print()}>Skriv ut (standard)</button>
-        <button className="btn" onClick={()=>window.print()}>Skriv ut (Avery 3481)</button>
+        <button
+  className="btn"
+  onClick={() => {
+    // lägg på en klass på <html> så bara etiketterna skrivs ut
+    document.documentElement.classList.add('print-avery');
+    window.print();
+    // ta bort klassen igen efteråt
+    setTimeout(() => document.documentElement.classList.remove('print-avery'), 500);
+  }}
+>
+  Skriv ut (Avery 3481)
+</button>
         <button className="btn" onClick={saveToDb}>Spara dessa ID i databasen</button>
       </div>
 
