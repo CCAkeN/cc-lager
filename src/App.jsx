@@ -36,9 +36,7 @@ const QRScanner = ({ onScan, onClose }) => {
 
   const stopScanner = async () => {
     try { await scannerRef.current?.stop(); } catch {}
-    try {
-      const el = holder.current?.querySelector("#qr-reader"); if (el) el.remove();
-    } catch {}
+    try { holder.current?.querySelector("#qr-reader")?.remove(); } catch {}
   };
 
   useEffect(() => {
@@ -94,7 +92,7 @@ const QRGen = ({ value, size = 200, label }) => {
   }, [value, size]);
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-      <canvas ref={canvasRef} style={{width:"100%", height:"auto"}} />
+      <canvas ref={canvasRef} />
       {label && <div style={{marginTop:8, fontSize:14}}>{label}</div>}
     </div>
   );
@@ -104,7 +102,6 @@ function AveryLabel({ id }) {
   return (
     <div className="avery-3481-label">
       <div className="avery-qr">
-        {/* 360px ~ 30mm @ 300 dpi for crisp print */}
         <QRGen value={id} size={360} />
       </div>
       <div className="avery-text">{id}</div>
@@ -496,17 +493,16 @@ function QRSection({ sb }) {
       <div className="row" style={{marginTop:12}}>
         <button className="btn" onClick={()=>window.print()}>Skriv ut (standard)</button>
         <button
-  className="btn"
-  onClick={() => {
-    // lägg på en klass på <html> så bara etiketterna skrivs ut
-    document.documentElement.classList.add('print-avery');
-    window.print();
-    // ta bort klassen igen efteråt
-    setTimeout(() => document.documentElement.classList.remove('print-avery'), 500);
-  }}
->
-  Skriv ut (Avery 3481)
-</button>
+          className="btn"
+          onClick={() => {
+            const html = document.documentElement;
+            html.classList.add('print-avery');
+            setTimeout(() => {
+              window.print();
+              setTimeout(() => html.classList.remove('print-avery'), 500);
+            }, 100);
+          }}
+        >Skriv ut (Avery 3481)</button>
         <button className="btn" onClick={saveToDb}>Spara dessa ID i databasen</button>
       </div>
 
