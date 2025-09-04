@@ -1,25 +1,11 @@
 # CC Lager – Multiuser webbapp (Supabase + QR)
 
-Nu med: bak-kamera som standard (med byt-knapp), valfri skannordning, leverera ut maskin, samt filtrering.
+Nu med Avery 3481 utskrift: QR till vänster, text till höger.
 
-## Snabbstart
-1) `npm install`  2) `npm run dev` → http://localhost:5173  
-Fyll i SUPABASE_URL + SUPABASE_ANON_KEY i appens setup-vy eller via env:
-```
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
+## Utskrift på Avery 3481 (70 x 41 mm, 21 etiketter/ark)
+1. Gå till **Generera QR-etiketter** och klistra in upp till 21 ID per ark.
+2. Klicka **Skriv ut (Avery 3481)**.
+3. I skrivardialogen: ställ **Skalning = 100%** (eller "Faktisk storlek"), **Marginaler = Ingen**.
+4. Skriv ut på arket – layouten är 3 kolumner × 7 rader, varje etikett 70×41 mm, QR ≈ 30mm till vänster och maskin-ID som text till höger.
 
-## Deploy (Vercel)
-- Build: `npm run build`  → `dist/`
-- Env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- Supabase Auth → URL Configuration → Site URL = din domän (exakt), ev. Additional Redirects för localhost.
-
-## Inloggning
-- Magic link + 6-siffrig kod (OTP) – koden kan klistras in direkt i appen.
-- E-post + lösenord – aktivera i Supabase (Auth → Providers → Email).
-
-## Flöden
-- Flytta maskin: skanna PLATS och MASKIN i valfri ordning. Senaste placement vinner.
-- Leverera ut: uppdaterar `machines.status = 'delivered'` och loggar `placements` med `location_id = null`.
-- Filtrering: i “Aktuell plats per maskin” – sök på maskin-ID eller plats.
+> Källa för 3481-format: 70×41mm, 21 etiketter per ark (A4).

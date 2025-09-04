@@ -94,11 +94,23 @@ const QRGen = ({ value, size = 200, label }) => {
   }, [value, size]);
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-      <canvas ref={canvasRef} />
-      <div style={{marginTop:8, fontSize:14}}>{label ?? value}</div>
+      <canvas ref={canvasRef} style={{width:"100%", height:"auto"}} />
+      {label && <div style={{marginTop:8, fontSize:14}}>{label}</div>}
     </div>
   );
 };
+
+function AveryLabel({ id }) {
+  return (
+    <div className="avery-3481-label">
+      <div className="avery-qr">
+        {/* 360px ~ 30mm @ 300 dpi for crisp print */}
+        <QRGen value={id} size={360} />
+      </div>
+      <div className="avery-text">{id}</div>
+    </div>
+  );
+}
 
 export default function App() {
   // Env
@@ -191,6 +203,7 @@ export default function App() {
   const latestByMachine = useMemo(() => {
     const map = new Map();
     for (const p of placements) {
+      if (p.location_id == null) continue; // skip delivered out
       const prev = map.get(p.machine_id);
       if (!prev || new Date(p.timestamp) > new Date(prev.timestamp)) map.set(p.machine_id, p);
     }
@@ -397,7 +410,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* QR Generator */}
+        {/* QR Generator + Avery print */}
         <QRSection sb={sb} />
       </div>
 
@@ -438,13 +451,15 @@ function InlineAdd({ placeholder, onAdd }) {
 function QRSection({ sb }) {
   const [qrType, setQrType] = useState('location');
   const [qrInput, setQrInput] = useState('');
-  const listIds = useMemo(() => qrInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean), [qrInput]);
+  const listIds = useMemo(() => qrInput.split(/[\\n,;\\s]+/).map(s => s.trim()).filter(Boolean), [qrInput]);
+  const chunk = (arr, size) => arr.reduce((acc,_,i)=> (i%size? acc: [...acc, arr.slice(i,i+size)]), []);
+  const sheets = useMemo(() => chunk(listIds, 21), [listIds]);
 
-  const isCC = (s) => /^CC\d{4}$/.test((s || "").trim());
+  const isCCid = (s) => /^CC\\d{4}$/.test((s || "").trim());
 
   const saveToDb = async () => {
     if (qrType==='machine') {
-      const payload = listIds.filter(isCC).map(id => ({ id, status: 'in_use' }));
+      const payload = listIds.filter(isCCid).map(id => ({ id, status: 'in_use' }));
       if (!payload.length) return alert("Inga giltiga maskin-ID i format CCxxxx");
       const { error } = await sb.from('machines').insert(payload, { upsert: true });
       if (error) alert(error.message); else alert('Maskiner sparade');
@@ -479,8 +494,19 @@ function QRSection({ sb }) {
         </div>
       </div>
       <div className="row" style={{marginTop:12}}>
-        <button className="btn" onClick={()=>window.print()}>Skriv ut</button>
+        <button className="btn" onClick={()=>window.print()}>Skriv ut (standard)</button>
+        <button className="btn" onClick={()=>window.print()}>Skriv ut (Avery 3481)</button>
         <button className="btn" onClick={saveToDb}>Spara dessa ID i databasen</button>
+      </div>
+
+      {/* Hidden print-only container for Avery 3481 */}
+      <div className="avery-3481">
+        {sheets.map((sheet, si) => (
+          <div className="avery-3481-sheet" key={si}>
+            {sheet.map((id, i) => (<AveryLabel id={id} key={i} />))}
+            {Array.from({length: Math.max(0, 21 - sheet.length)}).map((_,i)=>(<div className="avery-3481-label" key={'e'+i}></div>))}
+          </div>
+        ))}
       </div>
     </section>
   );

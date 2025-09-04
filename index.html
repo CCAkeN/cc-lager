@@ -21,6 +21,41 @@
       .muted { color: var(--muted); }
       .row { display:flex; gap:8px; }
       .row-center { display:flex; align-items:center; gap:8px; }
+
+      /* Avery 3481 print */
+      .avery-3481 { display: none; } /* hidden on screen */
+      @media print {
+        @page { size: A4 portrait; margin: 0; }
+        body { background: white; }
+        body * { visibility: hidden; }
+        .avery-3481, .avery-3481 * { visibility: visible; }
+        .avery-3481 { position: absolute; inset: 0; padding: 0; margin: 0; display: block !important; }
+
+        .avery-3481-sheet {
+          width: 210mm; height: 297mm;
+          page-break-after: always;
+          display: grid;
+          grid-template-columns: 70mm 70mm 70mm; /* 3 x 70 = 210 */
+          grid-auto-rows: 41mm;                 /* 7 rows */
+          column-gap: 0; row-gap: 0;
+        }
+        .avery-3481-label {
+          box-sizing: border-box;
+          padding: 2mm;
+          display: flex; align-items: center; gap: 2mm;
+        }
+        .avery-qr {
+          width: 30mm; height: 30mm;
+          display: inline-block;
+        }
+        .avery-text {
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+          font-size: 16pt;
+          font-weight: 700;
+          line-height: 1.1;
+          word-break: break-word;
+        }
+      }
     </style>
   </head>
   <body>
