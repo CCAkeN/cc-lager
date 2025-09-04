@@ -466,7 +466,11 @@ function InlineAdd({ placeholder, onAdd }) {
 function QRSection({ sb }) {
   const [qrType, setQrType] = useState('location');
   const [qrInput, setQrInput] = useState('');
-  const listIds = useMemo(() => qrInput.split(/[\\n,;\\s]+/).map(s => s.trim()).filter(Boolean), [qrInput]);
+  const listIds = useMemo(() =>
+  qrInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean),
+  [qrInput]
+);
+
   const chunk = (arr, size) => arr.reduce((acc,_,i)=> (i%size? acc: [...acc, arr.slice(i,i+size)]), []);
   const sheets = useMemo(() => chunk(listIds, 21), [listIds]);
 
